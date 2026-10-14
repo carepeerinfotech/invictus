@@ -8,6 +8,7 @@ use App\Models\Registration;
 use App\Models\Setting;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
@@ -135,5 +136,27 @@ class RegistrationTest extends TestCase
             ->get('/admin/registrations')
             ->assertOk()
             ->assertSee('Registration QR code');
+    }
+
+    public function test_admin_create_command_makes_a_login_and_resets_its_password(): void
+    {
+        $this->artisan('admin:create', ['email' => 'organiser@example.com', '--name' => 'Kashiv Seth'])
+            ->expectsQuestion('Password (at least 8 characters)', 'first-pass-123')
+            ->assertExitCode(0);
+
+        $this->artisan('admin:create', ['email' => 'organiser@example.com'])
+            ->expectsQuestion('Password (at least 8 characters)', 'short')
+            ->assertExitCode(1);
+
+        $this->artisan('admin:create', ['email' => 'organiser@example.com'])
+            ->expectsQuestion('Password (at least 8 characters)', 'second-pass-456')
+            ->assertExitCode(0);
+
+        $user = User::sole();
+        $this->assertSame('Kashiv Seth', $user->name);
+        $this->assertTrue(Hash::check('second-pass-456', $user->password));
+
+        $this->post('/admin/login', ['email' => 'organiser@example.com', 'password' => 'second-pass-456'])
+            ->assertRedirect('/admin/registrations');
     }
 }
